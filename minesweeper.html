@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minesweeper: Time Rewind Edition</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #000;
+            transition: background-image 0.5s ease;
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.85));
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            background: rgba(192, 192, 192, 0.95);
+            border: 4px outset #fff;
+            padding: 15px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            max-width: 95vw;
+            max-height: 95vh;
+            overflow: auto;
+        }
+
+        .title {
+            text-align: center;
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #000080;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 0px #fff;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        select, button {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            padding: 8px 15px;
+            margin: 0;
+            cursor: pointer;
+            border: 2px outset #fff;
+            background: #c0c0c0;
+        }
+
+        select:active, button:active {
+            border-style: inset;
+        }
+
+        button:hover, select:hover {
+            background: #d0d0d0;
+        }
+
+        #startBtn {
+            font-weight: bold;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #c0c0c0;
+            border: 3px inset #fff;
+            margin-bottom: 10px;
+        }
+
+        .stat {
+            font-size: 1.2em;
+            font-weight: bold;
+            padding: 5px 15px;
+            background: #000;
+            color: #ff0000;
+            border: 2px inset #808080;
+            min-width: 60px;
+            text-align: center;
+            font-family: 'Digital', monospace;
+        }
+
+        .rewind-display {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .rewind-token {
+            width: 25px;
+            height: 25px;
+            background: #ffd700;
+            border: 2px solid #ff8c00;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .rewind-token.used {
+            background: #404040;
+            border-color: #202020;
+        }
+
+
+        .grid {
+            display: inline-grid;
+            gap: 0;
+            border: 3px outset #fff;
+            background: #c0c0c0;
+            padding: 5px;
+        }
+
+        .cell {
+            width: 25px;
+            height: 25px;
+            border: 2px outset #fff;
+            background: #c0c0c0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+            user-select: none;
+        }
+
+        @media (min-width: 768px) {
+            .cell {
+                width: 30px;
+                height: 30px;
+                font-size: 1.1em;
+            }
+        }
+
+        .cell:active {
+            border-style: inset;
+        }
+
+        .cell.revealed {
+            border: 1px solid #808080;
+            background: #bdbdbd;
+            cursor: default;
+        }
+
+        .cell.flagged {
+            background: #c0c0c0;
+            color: #ff0000;
+            font-size: 1.3em;
+        }
+
+        .cell.question {
+            background: #c0c0c0;
+            color: #000;
+            font-size: 1.2em;
+        }
+
+        .cell.mine {
+            background: #ff0000;
+            color: #000;
+        }
+
+        .cell.mine-hit {
+            background: #ff0000;
+            color: #000;
+            animation: explode 0.3s;
+        }
+
+        @keyframes explode {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+        }
+
+        .cell-1 { color: #0000ff; }
+        .cell-2 { color: #008000; }
+        .cell-3 { color: #ff0000; }
+        .cell-4 { color: #000080; }
+        .cell-5 { color: #800000; }
+        .cell-6 { color: #008080; }
+        .cell-7 { color: #000000; }
+        .cell-8 { color: #808080; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #c0c0c0;
+            border: 4px outset #fff;
+            padding: 30px;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+            font-size: 2em;
+            color: #000080;
+        }
+
+        .modal-content p {
+            margin: 10px 0;
+            font-size: 1.1em;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">GlitchMob.AI Minesweeper</div>
+
+        <div class="top-bar">
+            <select id="difficulty">
+                <option value="beginner" selected>Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="expert">Expert</option>
+            </select>
+
+            <button id="startBtn" onclick="toggleGame()">START</button>
+        </div>
+
+        <div class="game-header">
+            <div class="stat" id="mineCount">000</div>
+            <div class="rewind-display">
+                <span style="margin-right: 10px; font-weight: bold;">REWINDS:</span>
+                <div class="rewind-token" id="token1"></div>
+                <div class="rewind-token" id="token2"></div>
+                <div class="rewind-token" id="token3"></div>
+            </div>
+            <div class="stat" id="timer">∞</div>
+        </div>
+
+        <div style="text-align: center;">
+            <div class="grid" id="grid"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Game Over</h2>
+            <p id="modalMessage"></p>
+            <div style="margin-top: 20px;">
+                <button onclick="closeModal(); toggleGame();">NEW GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="rewindModal">
+        <div class="modal-content">
+            <h2>💥 MINE HIT! 💥</h2>
+            <p id="rewindMessage"></p>
+            <div style="margin-top: 20px;">
+                <button id="rewindBtn" onclick="useRewind()">USE REWIND</button>
+                <button onclick="giveUp()">GIVE UP</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let config = {
+            beginner: { rows: 9, cols: 9, mines: 10 },
+            intermediate: { rows: 16, cols: 16, mines: 40 },
+            expert: { rows: 16, cols: 30, mines: 99 }
+        };
+
+        let game = {
+            rows: 0,
+            cols: 0,
+            mines: 0,
+            grid: [],
+            revealed: [],
+            flags: [],
+            questions: [],
+            gameOver: false,
+            won: false,
+            gameStarted: false,
+            rewindsLeft: 3,
+            timerActive: false,
+            timeLeft: Infinity,
+            timerInterval: null,
+            gameStates: []
+        };
+
+        function toggleGame() {
+            // Always read the current difficulty setting
+            const difficulty = document.getElementById('difficulty').value;
+            const settings = config[difficulty];
+            game.rows = settings.rows;
+            game.cols = settings.cols;
+            game.mines = settings.mines;
+
+            initGame();
+
+            if (!game.gameStarted) {
+                game.gameStarted = true;
+                document.getElementById('startBtn').textContent = 'NEW GAME';
+            }
+        }
+
+        // Auto-start on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const settings = config['beginner'];
+            game.rows = settings.rows;
+            game.cols = settings.cols;
+            game.mines = settings.mines;
+            initGame();
+        });
+
+        function initGame() {
+            game.grid = [];
+            game.revealed = [];
+            game.flags = [];
+            game.questions = [];
+            game.gameOver = false;
+            game.won = false;
+            game.rewindsLeft = 3;
+            game.timerActive = false;
+            game.timeLeft = Infinity;
+            game.gameStates = [];
+
+            if (game.timerInterval) {
+                clearInterval(game.timerInterval);
+                game.timerInterval = null;
+            }
+
+            updateTimer();
+            updateRewindDisplay();
+
+            // Create grid
+            for (let i = 0; i < game.rows; i++) {
+                game.grid[i] = [];
+                game.revealed[i] = [];
+                game.flags[i] = [];
+                game.questions[i] = [];
+                for (let j = 0; j < game.cols; j++) {
+                    game.grid[i][j] = 0;
+                    game.revealed[i][j] = false;
+                    game.flags[i][j] = false;
+                    game.questions[i][j] = false;
+                }
+            }
+
+            // Place mines
+            let minesPlaced = 0;
+            while (minesPlaced < game.mines) {
+                const row = Math.floor(Math.random() * game.rows);
+                const col = Math.floor(Math.random() * game.cols);
+                if (game.grid[row][col] !== -1) {
+                    game.grid[row][col] = -1;
+                    minesPlaced++;
+                }
+            }
+
+            // Calculate numbers
+            for (let i = 0; i < game.rows; i++) {
+                for (let j = 0; j < game.cols; j++) {
+                    if (game.grid[i][j] !== -1) {
+                        let count = 0;
+                        for (let di = -1; di <= 1; di++) {
+                            for (let dj = -1; dj <= 1; dj++) {
+                                const ni = i + di;
+                                const nj = j + dj;
+                                if (ni >= 0 && ni < game.rows && nj >= 0 && nj < game.cols && game.grid[ni][nj] === -1) {
+                                    count++;
+                                }
+                            }
+                        }
+                        game.grid[i][j] = count;
+                    }
+                }
+            }
+
+            renderGrid();
+            updateMineCount();
+        }
+
+        function renderGrid() {
+            const gridEl = document.getElementById('grid');
+            gridEl.innerHTML = '';
+            const cellSize = window.innerWidth >= 768 ? '30px' : '25px';
+            gridEl.style.gridTemplateColumns = `repeat(${game.cols}, ${cellSize})`;
+
+            for (let i = 0; i < game.rows; i++) {
+                for (let j = 0; j < game.cols; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+
+                    if (game.revealed[i][j]) {
+                        cell.classList.add('revealed');
+                        if (game.grid[i][j] === -1) {
+                            cell.innerHTML = '💣';
+                            cell.classList.add('mine');
+                        } else if (game.grid[i][j] > 0) {
+                            cell.innerHTML = game.grid[i][j];
+                            cell.classList.add(`cell-${game.grid[i][j]}`);
+                        }
+                    } else if (game.flags[i][j]) {
+                        cell.innerHTML = '🚩';
+                        cell.classList.add('flagged');
+                    } else if (game.questions[i][j]) {
+                        cell.innerHTML = '?';
+                        cell.classList.add('question');
+                    }
+
+                    cell.addEventListener('click', () => handleCellClick(i, j));
+                    cell.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        handleRightClick(i, j);
+                    });
+
+                    gridEl.appendChild(cell);
+                }
+            }
+        }
+
+        function saveGameState() {
+            game.gameStates.push({
+                revealed: game.revealed.map(row => [...row]),
+                flags: game.flags.map(row => [...row]),
+                questions: game.questions.map(row => [...row]),
+                timeLeft: game.timeLeft
+            });
+        }
+
+        function handleCellClick(row, col) {
+            if (game.gameOver || game.revealed[row][col] || game.flags[row][col] || game.questions[row][col]) return;
+
+            saveGameState();
+
+            if (game.grid[row][col] === -1) {
+                // Hit a mine!
+                handleMineHit(row, col);
+            } else {
+                revealCell(row, col);
+                renderGrid();
+                checkWin();
+            }
+        }
+
+        function handleMineHit(row, col) {
+            if (game.rewindsLeft > 0) {
+                showRewindModal();
+            } else {
+                game.revealed[row][col] = true;
+                game.gameOver = true;
+                renderGrid();
+                setTimeout(() => revealAllMines(), 500);
+                setTimeout(() => showModal('Game Over!', 'You hit a mine!'), 1000);
+            }
+        }
+
+        function revealCell(row, col) {
+            if (row < 0 || row >= game.rows || col < 0 || col >= game.cols || game.revealed[row][col]) return;
+
+            game.revealed[row][col] = true;
+
+            if (game.grid[row][col] === 0) {
+                for (let di = -1; di <= 1; di++) {
+                    for (let dj = -1; dj <= 1; dj++) {
+                        revealCell(row + di, col + dj);
+                    }
+                }
+            }
+        }
+
+        function handleRightClick(row, col) {
+            if (game.gameOver || game.revealed[row][col]) return;
+
+            // Cycle: blank -> flag -> question -> blank
+            if (!game.flags[row][col] && !game.questions[row][col]) {
+                // blank -> flag
+                game.flags[row][col] = true;
+            } else if (game.flags[row][col]) {
+                // flag -> question
+                game.flags[row][col] = false;
+                game.questions[row][col] = true;
+            } else {
+                // question -> blank
+                game.questions[row][col] = false;
+            }
+
+            renderGrid();
+            updateMineCount();
+        }
+
+        function updateMineCount() {
+            let flagCount = 0;
+            for (let i = 0; i < game.rows; i++) {
+                for (let j = 0; j < game.cols; j++) {
+                    if (game.flags[i][j]) flagCount++;
+                }
+            }
+            const remaining = game.mines - flagCount;
+            document.getElementById('mineCount').textContent = String(remaining).padStart(3, '0');
+        }
+
+        function updateTimer() {
+            if (game.timeLeft === Infinity) {
+                document.getElementById('timer').textContent = '∞';
+            } else {
+                document.getElementById('timer').textContent = String(Math.max(0, Math.ceil(game.timeLeft))).padStart(3, '0');
+            }
+        }
+
+        function startTimer() {
+            if (game.timerInterval) return;
+
+            game.timerInterval = setInterval(() => {
+                game.timeLeft -= 0.1;
+                updateTimer();
+
+                if (game.timeLeft <= 0) {
+                    clearInterval(game.timerInterval);
+                    game.gameOver = true;
+                    revealAllMines();
+                    setTimeout(() => showModal('Time Up!', 'You ran out of time!'), 500);
+                }
+            }, 100);
+        }
+
+        function updateRewindDisplay() {
+            for (let i = 1; i <= 3; i++) {
+                const token = document.getElementById(`token${i}`);
+                if (i > game.rewindsLeft) {
+                    token.classList.add('used');
+                } else {
+                    token.classList.remove('used');
+                }
+            }
+        }
+
+        function showRewindModal() {
+            let message = '';
+            if (game.rewindsLeft === 3) {
+                message = 'Use your first rewind? This will start a 60-second timer!';
+            } else if (game.rewindsLeft === 2) {
+                message = 'Use your second rewind? This will add 30 seconds to your timer!';
+            } else if (game.rewindsLeft === 1) {
+                message = 'Use your FINAL rewind? WARNING: This will SUBTRACT 10 seconds from your timer!';
+            }
+
+            document.getElementById('rewindMessage').textContent = message;
+            document.getElementById('rewindModal').classList.add('active');
+        }
+
+        function useRewind() {
+            document.getElementById('rewindModal').classList.remove('active');
+
+            if (game.gameStates.length === 0) return;
+
+            // Restore previous state
+            const prevState = game.gameStates.pop();
+            game.revealed = prevState.revealed;
+            game.flags = prevState.flags;
+            game.questions = prevState.questions;
+
+            // Apply time mechanics
+            if (game.rewindsLeft === 3) {
+                // First rewind: start 60 second timer
+                game.timeLeft = 60;
+                game.timerActive = true;
+                startTimer();
+            } else if (game.rewindsLeft === 2) {
+                // Second rewind: add 30 seconds
+                game.timeLeft += 30;
+            } else if (game.rewindsLeft === 1) {
+                // Third rewind: subtract 10 seconds (can cause instant loss)
+                game.timeLeft -= 10;
+                if (game.timeLeft <= 0) {
+                    game.gameOver = true;
+                    revealAllMines();
+                    setTimeout(() => showModal('Instant Death!', 'The third rewind took away your remaining time!'), 500);
+                    return;
+                }
+            }
+
+            game.rewindsLeft--;
+            updateRewindDisplay();
+            updateTimer();
+            renderGrid();
+        }
+
+        function giveUp() {
+            document.getElementById('rewindModal').classList.remove('active');
+            game.gameOver = true;
+            revealAllMines();
+            setTimeout(() => showModal('Game Over!', 'You gave up!'), 500);
+        }
+
+        function checkWin() {
+            let revealedCount = 0;
+            for (let i = 0; i < game.rows; i++) {
+                for (let j = 0; j < game.cols; j++) {
+                    if (game.revealed[i][j] && game.grid[i][j] !== -1) {
+                        revealedCount++;
+                    }
+                }
+            }
+
+            const totalSafeCells = game.rows * game.cols - game.mines;
+            if (revealedCount === totalSafeCells) {
+                game.won = true;
+                game.gameOver = true;
+                if (game.timerInterval) {
+                    clearInterval(game.timerInterval);
+                }
+                setTimeout(() => showModal('Victory!', `You cleared the minefield${game.timerActive ? ' in ' + (60 - Math.ceil(game.timeLeft)) + ' seconds' : ''}!`), 300);
+            }
+        }
+
+        function revealAllMines() {
+            for (let i = 0; i < game.rows; i++) {
+                for (let j = 0; j < game.cols; j++) {
+                    if (game.grid[i][j] === -1) {
+                        game.revealed[i][j] = true;
+                    }
+                }
+            }
+            renderGrid();
+        }
+
+        function showModal(title, message) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+    </script>
+</body>
+</html>
